@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xio</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
+
+        :root {
+            --bg-page: #f8fafc;
+            --card-bg: #ffffff;
+            --primary-blue: #007aff;
+            --primary-purple: #a855f7;
+            --primary-red: #ff3b30;
+            --primary-green: #10b981;
+            --border-light: #e2e8f0;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; font-family: 'Inter', sans-serif; }
+
+        body {
+            background-color: var(--bg-page); color: var(--text-dark);
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden;
+        }
+
+        /* --- Main Container --- */
+        #app-container {
+            width: 100%; max-width: 900px; height: 90vh; max-height: 650px;
+            background: var(--card-bg); border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.05), inset 0 0 0 4px #f1f5f9;
+            position: relative; overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; z-index: 10;
+            transition: opacity 0.3s ease; background: var(--card-bg);
+        }
+        .hidden { opacity: 0; pointer-events: none; }
+
+        /* --- Menus --- */
+        .menu-content { margin: auto; max-width: 600px; text-align: center; padding: 2rem; }
+        h1.title { font-size: 4rem; font-weight: 900; color: var(--primary-blue); letter-spacing: -2px; margin-bottom: 1rem; }
+        
+        .rules-box {
+            background: #f8fafc; border: 1px solid var(--border-light);
+            border-radius: 16px; padding: 1.5rem; text-align: left; margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        }
+        .rules-box h3 { margin-bottom: 10px; color: var(--primary-purple); font-size: 1.2rem;}
+        .rules-box ul { padding-left: 20px; line-height: 1.6; color: var(--text-muted); font-size: 0.95rem; }
+
+        .btn {
+            background: var(--primary-blue); color: white; border: none;
+            padding: 12px 24px; border-radius: 100px; font-size: 1rem; font-weight: 600;
+            cursor: pointer; transition: transform 0.1s, box-shadow 0.2s;
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3); margin: 0 10px;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 122, 255, 0.4); }
+        .btn:active { transform: translateY(0); }
+        .btn-purple { background: var(--primary-purple); box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3); }
+
+        /* --- Game Arena --- */
+        .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 2rem; z-index: 20; position: relative; }
+        
+        .timer-container { flex: 1; max-width: 300px; display: flex; flex-direction: column; align-items: center; margin-right: 20px; }
+        .timer-text { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase; }
+        .timer-bar-bg { width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+        .timer-bar-fill { height: 100%; background: var(--primary-blue); width: 100%; transition: background 0.3s; }
+
+        .control-btns button {
+            background: #f1f5f9; color: var(--text-dark); border: none; font-weight: 600;
+            padding: 8px 16px; border-radius: 8px; cursor: pointer; margin-left: 8px; transition: background 0.2s;
+        }
+        .control-btns button:hover { background: #e2e8f0; }
+
+        .arena { flex: 1; position: relative; z-index: 10; display: flex; align-items: center; justify-content: center; }
+
+        .entity { position: absolute; display: flex; flex-direction: column; align-items: center; transition: all 0.2s; }
+        .dot {
+            width: 40px; height: 40px; border-radius: 50%; border: 4px solid white; box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            position: relative; z-index: 2; transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .dot-blue { background: var(--primary-blue); box-shadow: 0 0 25px rgba(0, 122, 255, 0.6); }
+        .dot-purple { background: var(--primary-purple); box-shadow: 0 0 25px rgba(168, 85, 247, 0.6); }
+        
+        .entity-stats { margin-top: 15px; width: 100px; text-align: center; background: rgba(248, 250, 252, 0.8); padding: 8px; border-radius: 8px; border: 1px solid var(--border-light); }
+        .stat-text { font-size: 0.75rem; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display: flex; justify-content: space-between;}
+        .hp-bar-bg { width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+        .hp-bar-fill { height: 100%; background: var(--primary-green); transition: width 0.2s, background 0.2s; }
+        
+        .en-text { color: var(--primary-blue); font-size: 0.85rem;}
+        .entity-name { font-size: 0.85rem; font-weight: 800; color: var(--text-dark); margin-bottom: 12px; letter-spacing: 0.5px; }
+
+        #ent-p1 { left: 15%; top: 50%; transform: translateY(-50%); }
+        #ent-p2 { right: 15%; top: 50%; transform: translateY(-50%); }
+        #ent-p3 { left: 15%; top: 25%; transform: translateY(-50%); } 
+        #ent-p4 { left: 15%; top: 75%; transform: translateY(-50%); } 
+        
+        .keyboard-guide {
+            padding: 1.5rem; background: var(--card-bg); border-top: 1px solid var(--border-light); z-index: 20;
+            display: flex; justify-content: center; gap: 20px; font-size: 0.85rem;
+        }
+        .key-group { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-weight: 600; padding: 6px 12px; border-radius: 8px; border: 2px solid transparent; transition: border 0.1s;}
+        .key-group.selected { border: 2px solid var(--primary-blue); background: #f0f7ff; color: var(--primary-blue); }
+        kbd { background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; box-shadow: 0 2px 0 #cbd5e1; font-family: monospace; font-size: 0.9rem; color: var(--text-dark); }
+
+        /* FX */
+        .dash-right { transform: translateX(40px) scale(1.1); }
+        .dash-left { transform: translateX(-40px) scale(1.1); }
+        .shield-up { transform: scale(0.9); border: 4px solid var(--primary-green); }
+        .xio-glow { box-shadow: 0 0 30px var(--primary-green), inset 0 0 10px var(--primary-green) !important; transform: scale(1.15); border-color: var(--primary-green);}
+        #overlay-fx { position: absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index: 50; transition: background 0.1s; }
+
+        /* --- Cinematic Game Over Screen --- */
+        #screen-game-over {
+            background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100;
+        }
+        .result-title {
+            font-size: 6rem; font-weight: 900; text-transform: uppercase; margin-bottom: 2rem;
+            opacity: 0; transform: scale(0.5); transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .result-title.show { opacity: 1; transform: scale(1); }
+        
+        .victory-text { color: #fff; text-shadow: 0 0 30px var(--primary-blue), 0 0 60px var(--primary-green); }
+        .defeat-text { color: #fff; text-shadow: 0 0 30px var(--primary-red), 0 0 60px #7f1d1d; }
+        .draw-text { color: #fff; text-shadow: 0 0 30px #94a3b8; }
+        
+        .game-over-btns { display: flex; gap: 15px; opacity: 0; transform: translateY(20px); transition: all 0.4s ease 0.4s; }
+        .game-over-btns.show { opacity: 1; transform: translateY(0); }
+        .game-over-btns .btn { padding: 14px 32px; font-size: 1.1rem; }
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+    <div id="screen-menu" class="screen">
+        <div class="menu-content">
+            <h1 class="title">Xio</h1>
+            <div class="rules-box">
+                <h3>Game Overview & Rules</h3>
+                <ul>
+                    <li><strong>Turn-Based Timer:</strong> You have <strong>5 seconds</strong> to act. The turn resolves instantly when you input.</li>
+                    <li><strong>Energy (0E):</strong> Press <kbd>Space</kbd> to <strong>Xio</strong> (+1 Energy, limitless!). <em>Leaves you vulnerable!</em></li>
+                    <li><strong>Attacks:</strong> 
+                        <kbd>J</kbd> Jab (1E | 0.5 DMG) <br>
+                        <kbd>K</kbd> Crush (2E | 1.0 DMG) <br>
+                        <kbd>L</kbd> Slam (3E | 1.5 DMG)
+                    </li>
+                    <li><strong>Defenses (0E):</strong> 
+                        <kbd>S</kbd> Low Guard blocks Jab <br>
+                        <kbd>W</kbd> High Guard blocks Crush <br>
+                        <kbd>J</kbd> Jab interrupts & blocks Slam
+                    </li>
+                    <li><em>Timer runs out = Default to Low Guard!</em></li>
+                </ul>
+            </div>
+            <button class="btn" onclick="startGame('1v1', 'p1')">Classic 1v1</button>
+            <button class="btn btn-purple" onclick="showRoleSelect()">Boss Mode (2v1)</button>
+        </div>
+    </div>
+
+    <div id="screen-role" class="screen hidden">
+        <div class="menu-content">
+            <h1 class="title" style="font-size: 2.5rem; margin-bottom: 2rem;">Select Your Role</h1>
+            <p style="margin-bottom: 2rem; color: var(--text-muted);">
+                <strong>Peasant:</strong> 10 HP. You and an AI partner fight the Boss.<br>
+                <strong>Boss:</strong> 50 HP. You fight two AI Peasants. (Attacks auto-target healthiest Peasant).
+            </p>
+            <button class="btn" onclick="startGame('boss', 'peasant')">Play as Peasant</button>
+            <button class="btn btn-purple" onclick="startGame('boss', 'boss')">Play as Boss</button>
+            <br><br>
+            <button class="btn" style="background:transparent; color:var(--text-muted); box-shadow:none;" onclick="showMenu()">Back</button>
+        </div>
+    </div>
+
+    <div id="screen-game" class="screen hidden" style="background: transparent;">
+        <div class="top-bar">
+            <div class="timer-container">
+                <div class="timer-text" id="timer-text">Thinking Time</div>
+                <div class="timer-bar-bg"><div class="timer-bar-fill" id="timer-bar"></div></div>
+            </div>
+            <div class="control-btns">
+                <button onclick="togglePause()" id="btn-pause">Pause</button>
+                <button onclick="resetGame()">Restart</button>
+                <button onclick="quitGame()" style="color: var(--text-muted);">Quit</button>
+            </div>
+        </div>
+        <div class="arena" id="arena-container"></div>
+        <div class="keyboard-guide">
+            <div class="key-group" id="ui-xio"><kbd>Space</kbd> Xio</div>
+            <div class="key-group" id="ui-defend"><kbd>W</kbd> High <kbd>S</kbd> Low </div>
+            <div class="key-group" id="ui-attack"><kbd>J</kbd> Jab <kbd>K</kbd> Crush <kbd>L</kbd> Slam</div>
+        </div>
+    </div>
+
+    <div id="screen-game-over" class="screen hidden">
+        <div class="result-title" id="result-title">VICTORY</div>
+        <div class="game-over-btns" id="game-over-btns">
+            <button class="btn" onclick="startGame(state.mode, state.playerRole)">Play Again</button>
+            <button class="btn" style="background: rgba(255,255,255,0.1);" onclick="quitGame()">Main Menu</button>
+        </div>
+    </div>
+
+    <div id="overlay-fx"></div>
+</div>
+
+<script>
+    /* --- Audio Engine --- */
+    let audioCtx;
+    function initAudio() {
+        if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+    }
+    
+    function playSound(type) {
+        if(!audioCtx) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if(type === 'hit') {
+            osc.type = 'square'; osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+            gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.start(now); osc.stop(now + 0.2);
+        } else if(type === 'block') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(800, now);
+            gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now); osc.stop(now + 0.1);
+        } else if(type === 'error') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, now);
+            gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+            osc.start(now); osc.stop(now + 0.15);
+        } else if(type === 'xio') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(1000, now + 0.2);
+            gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.start(now); osc.stop(now + 0.2);
+        } else if (type === 'victory') {
+            osc.type = 'triangle';
+            [440, 554, 659, 880].forEach((freq, i) => {
+                const stepOsc = audioCtx.createOscillator();
+                const stepGain = audioCtx.createGain();
+                stepOsc.connect(stepGain); stepGain.connect(audioCtx.destination);
+                stepOsc.type = 'sine'; stepOsc.frequency.value = freq;
+                stepGain.gain.setValueAtTime(0, now + i*0.1);
+                stepGain.gain.linearRampToValueAtTime(0.2, now + i*0.1 + 0.05);
+                stepGain.gain.exponentialRampToValueAtTime(0.01, now + i*0.1 + 0.3);
+                stepOsc.start(now + i*0.1); stepOsc.stop(now + i*0.1 + 0.4);
+            });
+        } else if (type === 'defeat') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, now); osc.frequency.exponentialRampToValueAtTime(30, now + 0.8);
+            gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
+            osc.start(now); osc.stop(now + 0.8);
+        }
+    }
+
+    const ACTIONS = {
+        xio: { cost: 0, type: 'xio', ui: 'ui-xio' },
+        low_guard: { cost: 0, type: 'defend', ui: 'ui-defend' },
+        high_guard: { cost: 0, type: 'defend', ui: 'ui-defend' },
+        jab: { cost: 1, dmg: 0.5, type: 'attack', ui: 'ui-attack' },
+        crush: { cost: 2, dmg: 1.0, type: 'attack', ui: 'ui-attack' },
+        slam: { cost: 3, dmg: 1.5, type: 'attack', ui: 'ui-attack' }
+    };
+
+    const TURN_TIME_MS = 5000;
+
+    let state = { status: 'menu', mode: '1v1', playerRole: 'p1', timerId: null, timeRemaining: 0, lastTick: 0, entities: {} };
+
+    const screens = {
+        menu: document.getElementById('screen-menu'),
+        role: document.getElementById('screen-role'),
+        game: document.getElementById('screen-game'),
+        gameOver: document.getElementById('screen-game-over')
+    };
+
+    function switchScreen(screenName) {
+        Object.values(screens).forEach(s => s.classList.add('hidden'));
+        screens[screenName].classList.remove('hidden');
+    }
+    function showMenu() { switchScreen('menu'); }
+    function showRoleSelect() { switchScreen('role'); }
+
+    function startGame(mode, role) {
+        if (document.activeElement) document.activeElement.blur();
+        initAudio();
+        state.mode = mode; state.playerRole = role; state.status = 'playing';
+        
+        document.getElementById('result-title').className = 'result-title';
+        document.getElementById('game-over-btns').className = 'game-over-btns';
+
+        setupEntities(); renderArena(); updateBars();
+        document.getElementById('btn-pause').innerText = 'Pause';
+        switchScreen('game');
+        startTurn();
+    }
+
+    function setupEntities() {
+        state.entities = {};
+        if (state.mode === '1v1') {
+            state.entities.p1 = { id: 'p1', name: 'You', hp: 3, maxHp: 3, energy: 0, isPlayer: true, target: 'p2', cssId: 'ent-p1', color: 'blue' };
+            state.entities.p2 = { id: 'p2', name: 'AI Opponent', hp: 3, maxHp: 3, energy: 0, isPlayer: false, target: 'p1', cssId: 'ent-p2', color: 'purple' };
+        } else if (state.mode === 'boss') {
+            if (state.playerRole === 'peasant') {
+                state.entities.p1 = { id: 'p1', name: 'You (Peasant)', hp: 10, maxHp: 10, energy: 0, isPlayer: true, target: 'boss', cssId: 'ent-p3', color: 'blue' };
+                state.entities.p2 = { id: 'p2', name: 'AI Ally', hp: 10, maxHp: 10, energy: 0, isPlayer: false, target: 'boss', cssId: 'ent-p4', color: 'blue' };
+                state.entities.boss = { id: 'boss', name: 'Boss', hp: 50, maxHp: 50, energy: 0, isPlayer: false, target: 'p1', cssId: 'ent-p2', color: 'purple' };
+            } else {
+                state.entities.p1 = { id: 'p1', name: 'Peasant 1', hp: 10, maxHp: 10, energy: 0, isPlayer: false, target: 'boss', cssId: 'ent-p3', color: 'purple' };
+                state.entities.p2 = { id: 'p2', name: 'Peasant 2', hp: 10, maxHp: 10, energy: 0, isPlayer: false, target: 'boss', cssId: 'ent-p4', color: 'purple' };
+                state.entities.boss = { id: 'boss', name: 'You (Boss)', hp: 50, maxHp: 50, energy: 0, isPlayer: true, target: 'p1', cssId: 'ent-p2', color: 'blue' };
+            }
+        }
+    }
+
+    function renderArena() {
+        const arena = document.getElementById('arena-container');
+        arena.innerHTML = '';
+        Object.values(state.entities).forEach(ent => {
+            const el = document.createElement('div');
+            el.className = 'entity'; el.id = ent.cssId;
+            let displayHp = Math.max(0, ent.hp);
+            let hpText = displayHp % 1 === 0 ? displayHp : displayHp.toFixed(1);
+            el.innerHTML = `
+                <div class="entity-name">${ent.name}</div>
+                <div class="dot dot-${ent.color}" id="dot-${ent.id}"></div>
+                <div class="entity-stats">
+                    <div class="stat-text"><span>HP:</span> <span id="hp-txt-${ent.id}">${hpText}</span></div>
+                    <div class="hp-bar-bg"><div class="hp-bar-fill" id="hp-bar-${ent.id}" style="width:100%"></div></div>
+                    <div class="stat-text"><span>Energy:</span> <span id="en-txt-${ent.id}" class="en-text">0</span></div>
+                </div>
+            `;
+            arena.appendChild(el);
+        });
+    }
+
+    function updateBars() {
+        Object.values(state.entities).forEach(ent => {
+            const hpEl = document.getElementById(`hp-txt-${ent.id}`);
+            if(hpEl) {
+                let displayHp = Math.max(0, ent.hp);
+                hpEl.innerText = displayHp % 1 === 0 ? displayHp : displayHp.toFixed(1);
+            }
+            const enEl = document.getElementById(`en-txt-${ent.id}`);
+            if(enEl) enEl.innerText = ent.energy;
+            const hpPct = Math.max(0, (ent.hp / ent.maxHp) * 100);
+            const hpBar = document.getElementById(`hp-bar-${ent.id}`);
+            if(hpBar) {
+                hpBar.style.width = `${hpPct}%`;
+                hpBar.style.background = hpPct > 30 ? 'var(--primary-green)' : 'var(--primary-red)';
+            }
+        });
+    }
+
+    function startTurn() {
+        if(state.status === 'over') return;
+        state.status = 'playing'; state.timeRemaining = TURN_TIME_MS; state.lastTick = performance.now();
+        document.getElementById('timer-bar').style.background = 'var(--primary-blue)';
+        cancelAnimationFrame(state.timerId); updateTimer();
+    }
+
+    function updateTimer() {
+        if(state.status !== 'playing') return;
+        const now = performance.now(); const dt = now - state.lastTick; state.lastTick = now;
+        state.timeRemaining -= dt;
+        const pct = Math.max(0, (state.timeRemaining / TURN_TIME_MS) * 100);
+        const timerBar = document.getElementById('timer-bar');
+        timerBar.style.width = `${pct}%`;
+        if (pct < 25) timerBar.style.background = 'var(--primary-red)';
+
+        if (state.timeRemaining <= 0) processTurn('low_guard');
+        else state.timerId = requestAnimationFrame(updateTimer);
+    }
+
+    function processTurn(playerAction) {
+        state.status = 'resolving'; cancelAnimationFrame(state.timerId);
+        document.querySelectorAll('.key-group').forEach(el => el.classList.remove('selected'));
+        if(ACTIONS[playerAction]) document.getElementById(ACTIONS[playerAction].ui).classList.add('selected');
+
+        let actions = {};
+        Object.values(state.entities).forEach(ent => {
+            if (ent.hp <= 0) return;
+            if (ent.isPlayer) {
+                actions[ent.id] = playerAction;
+                if (ent.id === 'boss') {
+                    let p1 = state.entities.p1; let p2 = state.entities.p2;
+                    ent.target = (p1.hp > 0 && p2.hp > 0) ? (p1.hp >= p2.hp ? 'p1' : 'p2') : (p1.hp > 0 ? 'p1' : 'p2');
+                }
+            } else {
+                actions[ent.id] = getAIAction(ent);
+                if (ent.id === 'boss') {
+                    let p1 = state.entities.p1; let p2 = state.entities.p2;
+                    ent.target = (p1.hp > 0 && p2.hp > 0) ? (p1.hp >= p2.hp ? 'p1' : 'p2') : (p1.hp > 0 ? 'p1' : 'p2');
+                }
+            }
+        });
+
+        let anyDamage = false, anyBlock = false, anyXio = false;
+
+        Object.keys(actions).forEach(id => {
+            let ent = state.entities[id]; let act = ACTIONS[actions[id]];
+            ent.energy -= act.cost;
+            if(act.type === 'xio') { ent.energy++; anyXio = true; }
+            
+            let dotEl = document.getElementById(`dot-${id}`);
+            if(dotEl) {
+                if(act.type === 'attack') dotEl.classList.add(ent.cssId === 'ent-p2' ? 'dash-left' : 'dash-right');
+                if(act.type === 'defend') dotEl.classList.add('shield-up');
+                if(act.type === 'xio') dotEl.classList.add('xio-glow'); 
+            }
+        });
+
+        Object.keys(actions).forEach(attackerId => {
+            let attacker = state.entities[attackerId]; let atkAction = actions[attackerId]; let aData = ACTIONS[atkAction];
+            if(aData.type !== 'attack') return;
+
+            let target = state.entities[attacker.target];
+            if(!target || target.hp <= 0) return;
+
+            let targetAction = actions[target.id]; let blocked = false;
+            let isFocused = (target.target === attacker.id || target.id !== 'boss');
+
+            if (isFocused) {
+                if (atkAction === 'jab' && targetAction === 'low_guard') blocked = true;
+                if (atkAction === 'crush' && targetAction === 'high_guard') blocked = true;
+                if (atkAction === 'slam' && targetAction === 'jab') blocked = true;
+            }
+
+            if (blocked) anyBlock = true;
+            else { target.hp -= aData.dmg; anyDamage = true; }
+        });
+
+        updateBars();
+        if (anyXio) playSound('xio');
+        if (anyDamage) {
+            playSound('hit');
+            document.getElementById('overlay-fx').style.background = 'rgba(255, 59, 48, 0.15)';
+            setTimeout(() => document.getElementById('overlay-fx').style.background = 'transparent', 150);
+        } else if(anyBlock) playSound('block');
+
+        setTimeout(() => {
+            document.querySelectorAll('.dot').forEach(d => d.className = d.className.replace(/dash-right|dash-left|shield-up|xio-glow/g, ''));
+            document.querySelectorAll('.key-group').forEach(el => el.classList.remove('selected'));
+            if(!checkGameOver()) startTurn();
+        }, 500);
+    }
+
+    function getAIAction(ent) {
+        let targetEnt = state.entities[ent.target];
+        if (!targetEnt || targetEnt.hp <= 0) return 'xio'; 
+
+        let myE = ent.energy; let oppE = targetEnt.energy;
+        let myHp = ent.hp; let isBoss = ent.id === 'boss';
+        
+        let available = ['xio', 'low_guard', 'high_guard'];
+        if (myE >= 1) available.push('jab');
+        if (myE >= 2) available.push('crush');
+        if (myE >= 3) available.push('slam');
+
+        if (myE >= 3 && oppE === 0) return 'slam';
+
+        if (myE >= 3 && oppE >= 1) {
+            let r = Math.random();
+            if (r < 0.4) return 'low_guard'; 
+            if (r < 0.7) return 'crush';     
+            return 'slam';                   
+        }
+
+        if (oppE === 0) {
+            if (myE === 0) return Math.random() < 0.85 ? 'xio' : 'low_guard'; 
+            if (myE === 1) return Math.random() < 0.6 ? 'jab' : 'xio';        
+            if (myE === 2) return Math.random() < 0.7 ? 'crush' : 'xio';      
+        }
+
+        if (myHp <= 0.5 && oppE >= 1) {
+            if (oppE >= 3 && myE >= 1) return 'jab'; 
+            return Math.random() < 0.5 ? 'low_guard' : 'high_guard'; 
+        }
+
+        if (isBoss) {
+            if (myE >= 2) return Math.random() < 0.6 ? 'crush' : 'jab';
+            if (myE === 1) return Math.random() < 0.5 ? 'jab' : 'xio';
+        }
+
+        if (myE === 0) {
+            let r = Math.random();
+            if (oppE >= 2) return r < 0.4 ? 'high_guard' : (r < 0.8 ? 'low_guard' : 'xio');
+            return r < 0.5 ? 'low_guard' : 'xio'; 
+        } else {
+            let offensive = available.filter(a => a !== 'low_guard' && a !== 'high_guard' && a !== 'xio');
+            let r = Math.random();
+            if (r < 0.4 && offensive.length > 0) return offensive[Math.floor(Math.random() * offensive.length)];
+            if (r < 0.7) return Math.random() < 0.5 ? 'low_guard' : 'high_guard';
+            return 'xio';
+        }
+    }
+
+    function checkGameOver() {
+        let playersDead = true; let aiDead = true;
+        Object.values(state.entities).forEach(ent => {
+            if (ent.hp > 0) {
+                if(ent.isPlayer) playersDead = false; else aiDead = false;
+                if (state.mode === 'boss' && state.playerRole === 'peasant' && ent.id === 'p2') playersDead = false;
+                if (state.mode === 'boss' && state.playerRole === 'boss' && (ent.id === 'p1' || ent.id === 'p2')) aiDead = false;
+            }
+        });
+
+        if (playersDead || aiDead) {
+            state.status = 'over'; cancelAnimationFrame(state.timerId);
+            
+            switchScreen('gameOver');
+            const titleEl = document.getElementById('result-title');
+            const btnsEl = document.getElementById('game-over-btns');
+            
+            if (playersDead && aiDead) {
+                titleEl.innerText = "DRAW"; titleEl.className = "result-title draw-text show";
+                playSound('error');
+            } else if (playersDead) {
+                titleEl.innerText = "DEFEAT"; titleEl.className = "result-title defeat-text show";
+                playSound('defeat');
+            } else {
+                titleEl.innerText = "VICTORY"; titleEl.className = "result-title victory-text show";
+                playSound('victory');
+            }
+            
+            setTimeout(() => { btnsEl.classList.add('show'); }, 100);
+            return true;
+        }
+        return false;
+    }
+
+    /* --- Inputs & Controls --- */
+    window.addEventListener('keydown', (e) => {
+        if (e.key === ' ') e.preventDefault();
+        if (e.repeat) return; 
+        if (state.status !== 'playing') return; 
+        
+        const key = e.key.toLowerCase(); let intended = null;
+        if (key === ' ') intended = 'xio';
+        if (key === 's') intended = 'low_guard';
+        if (key === 'w') intended = 'high_guard';
+        if (key === 'j') intended = 'jab';
+        if (key === 'k') intended = 'crush';
+        if (key === 'l') intended = 'slam';
+
+        if (intended) {
+            let playerEnt = Object.values(state.entities).find(e => e.isPlayer);
+            if(playerEnt && ACTIONS[intended].cost > playerEnt.energy) { playSound('error'); return; }
+            processTurn(intended);
+        }
+    });
+
+    function togglePause() {
+        if (document.activeElement) document.activeElement.blur();
+        if(state.status === 'playing') {
+            state.status = 'paused'; cancelAnimationFrame(state.timerId);
+            document.getElementById('btn-pause').innerText = 'Resume';
+            document.getElementById('timer-text').innerText = 'PAUSED';
+        } else if (state.status === 'paused') {
+            state.status = 'playing'; state.lastTick = performance.now(); 
+            state.timerId = requestAnimationFrame(updateTimer);
+            document.getElementById('btn-pause').innerText = 'Pause';
+            document.getElementById('timer-text').innerText = 'Thinking Time';
+        }
+    }
+    
+    // --- 新增的 Restart 重置功能 ---
+    function resetGame() {
+        if (document.activeElement) document.activeElement.blur();
+        startGame(state.mode, state.playerRole);
+    }
+
+    function quitGame() {
+        if (document.activeElement) document.activeElement.blur();
+        state.status = 'menu'; cancelAnimationFrame(state.timerId); showMenu();
+    }
+</script>
+</body>
+</html>
