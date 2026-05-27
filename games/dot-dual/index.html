@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dot Duel: VS Computer</title>
+    <style>
+        :root {
+            --bg-color: #f2f4f3; 
+            --container-bg: #ffffff;
+            --text-main: #2c3e50;
+            --p1-color: #007aff;
+            --p2-color: #af52de;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #header-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 10px 28px;
+            border-radius: 50px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.02);
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            margin-bottom: 20px;
+            border: 1px solid rgba(0,0,0,0.02);
+        }
+
+        .player-badge {
+            font-size: 0.95rem;
+            font-weight: 700;
+            padding: 5px 16px;
+            border-radius: 30px;
+            color: #ffffff;
+            opacity: 0.25;
+            transform: scale(0.92);
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .player-badge.active {
+            opacity: 1;
+            transform: scale(1.06);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+        }
+
+        #game-wrapper {
+            position: relative;
+            border-radius: 28px;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.04);
+        }
+
+        canvas {
+            display: block;
+            border-radius: 20px;
+            background: var(--container-bg);
+            cursor: grab;
+        }
+
+        canvas:active {
+            cursor: grabbing;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: calc(100% - 16px);
+            height: calc(100% - 16px);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+            z-index: 10;
+        }
+
+        #overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #result-title {
+            font-size: 2.6rem;
+            font-weight: 900;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+
+        .action-btn {
+            background: #1c1c1e;
+            color: #ffffff;
+            border: none;
+            padding: 14px 40px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 35px;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover {
+            background: #3a3a3c;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="header-panel">
+        <div id="badge-p1" class="player-badge" style="background: var(--p1-color);">Your Turn</div>
+        <div id="badge-p2" class="player-badge" style="background: var(--p2-color);">AI Thinking...</div>
+    </div>
+
+    <div id="game-wrapper">
+        <canvas id="horizonCanvas"></canvas>
+        <div id="overlay">
+            <div id="result-title">Match Finished</div>
+            <button class="action-btn" onclick="restartMatch()">Play Again</button>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('horizonCanvas');
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('overlay');
+    const resultTitle = document.getElementById('result-title');
+    const badgeP1 = document.getElementById('badge-p1');
+    const badgeP2 = document.getElementById('badge-p2');
+
+    // --- Horizontal Map Dimensions ---
+    const MAP_WIDTH = 840;  
+    const MAP_HEIGHT = 560; 
+    canvas.width = MAP_WIDTH;
+    canvas.height = MAP_HEIGHT;
+
+    // --- Game Engine Variables ---
+    const FRICTION = 0.985; 
+    const BALL_RADIUS = 15;
+    const FORCE_SCALE = 0.24; 
+
+    let p1Dot, p2Dot; // P1 = Player, P2 = AI
+    let turnOwner = 1; // 1 = Player, 2 = AI
+    let FXParticles = [];
+    let dragControl = { active: false, start: {x:0, y:0}, current: {x:0, y:0} };
+    let matchOver = false;
+    let waveTime = 0;
+    let aiCooldownTimer = 0; // 给电脑思考加一点舒适的拟人延迟
+
+    const RIVER_BASE_LEFT = MAP_WIDTH / 2 - 35;
+    const RIVER_BASE_RIGHT = MAP_WIDTH / 2 + 35;
+
+    // --- Procedural Sound Generator (Web Audio API) ---
+    let audioCtx = null;
+
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+
+    function playSound(type) {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+
+        if (type === 'launch') {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(350, now);
+            osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+            osc.start(now); osc.stop(now + 0.15);
+        } 
+        else if (type === 'hit') {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.exponentialRampToValueAtTime(440, now + 0.08);
+            gain.gain.setValueAtTime(0.4, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now); osc.stop(now + 0.1);
+        } 
+        else if (type === 'wall') {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(150, now);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+            osc.start(now); osc.stop(now + 0.08);
+        }
+        else if (type === 'sink') {
+            const osc = audioCtx.createOscillator();
+            const lfo = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+
+            osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+
+            const lfoGain = audioCtx.createGain();
+            lfoGain.gain.setValueAtTime(40, now);
+            lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+
+            lfo.type = 'sine'; lfo.frequency.setValueAtTime(25, now);
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(220, now);
+            osc.frequency.linearRampToValueAtTime(50, now + 0.6);
+
+            filter.type = 'lowpass'; filter.frequency.setValueAtTime(600, now);
+            filter.frequency.exponentialRampToValueAtTime(100, now + 0.6);
+
+            gain.gain.setValueAtTime(0.4, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.65);
+
+            lfo.start(now); osc.start(now);
+            lfo.stop(now + 0.65); osc.stop(now + 0.65);
+        }
+    }
+
+    class StrategicDot {
+        constructor(x, y, color, id) {
+            this.x = x; this.y = y; this.vx = 0; this.vy = 0;
+            this.radius = BALL_RADIUS; this.color = color; this.id = id;
+            this.trail = [];
+        }
+
+        update() {
+            this.x += this.vx; this.y += this.vy;
+            this.vx *= FRICTION; this.vy *= FRICTION;
+
+            if (Math.abs(this.vx) < 0.035) this.vx = 0;
+            if (Math.abs(this.vy) < 0.035) this.vy = 0;
+
+            let hitWall = false;
+            if (this.x - this.radius < 0) { this.x = this.radius; this.vx *= -0.75; hitWall = true; }
+            else if (this.x + this.radius > MAP_WIDTH) { this.x = MAP_WIDTH - this.radius; this.vx *= -0.75; hitWall = true; }
+            if (this.y - this.radius < 0) { this.y = this.radius; this.vy *= -0.75; hitWall = true; }
+            else if (this.y + this.radius > MAP_HEIGHT) { this.y = MAP_HEIGHT - this.radius; this.vy *= -0.75; hitWall = true; }
+
+            if (hitWall && (Math.abs(this.vx) > 0.2 || Math.abs(this.vy) > 0.2)) {
+                playSound('wall');
+            }
+
+            if (this.isMoving()) {
+                this.trail.push({ x: this.x, y: this.y });
+                if (this.trail.length > 12) this.trail.shift();
+            } else {
+                if (this.trail.length > 0) this.trail.shift();
+            }
+        }
+
+        isMoving() { return this.vx !== 0 || this.vy !== 0; }
+
+        draw() {
+            for (let i = 0; i < this.trail.length; i++) {
+                ctx.beginPath();
+                ctx.arc(this.trail[i].x, this.trail[i].y, this.radius * (0.2 + 0.8 * (i / this.trail.length)), 0, Math.PI * 2);
+                ctx.fillStyle = this.color + Math.floor((i / this.trail.length) * 100).toString(16).padStart(2, '0');
+                ctx.fill();
+            }
+            ctx.save();
+            ctx.shadowBlur = 15; ctx.shadowColor = this.color;
+            ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color; ctx.fill();
+            ctx.restore();
+
+            ctx.beginPath(); ctx.arc(this.x, this.y, this.radius * 0.45, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)'; ctx.fill();
+        }
+    }
+
+    function checkWaterContamination(x, y) {
+        const currentLeftBound = RIVER_BASE_LEFT + Math.sin(y * 0.025 + waveTime) * 15;
+        const currentRightBound = RIVER_BASE_RIGHT + Math.sin(y * 0.025 + waveTime + Math.PI) * 15;
+        if (x > currentLeftBound && x < currentRightBound) return true;
+
+        const cornerSize = 120;
+        const shorelineOffset = Math.sin((x + y) * 0.04 + waveTime) * 8;
+        const limitWithWave = cornerSize + shorelineOffset;
+
+        if (x >= 0 && y >= 0 && (x + y < limitWithWave)) return true;
+        if (x >= MAP_WIDTH - limitWithWave && y <= limitWithWave && ((MAP_WIDTH - x) + y < limitWithWave)) return true;
+        if (x <= limitWithWave && y >= MAP_HEIGHT - limitWithWave && (x + (MAP_HEIGHT - y) < limitWithWave)) return true;
+        if (x >= MAP_WIDTH - limitWithWave && y >= MAP_HEIGHT - limitWithWave && ((MAP_WIDTH - x) + (MAP_HEIGHT - y) < limitWithWave)) return true;
+
+        return false;
+    }
+
+    function drawWaterAssets() {
+        ctx.fillStyle = 'rgba(52, 152, 219, 0.07)';
+        ctx.strokeStyle = 'rgba(52, 152, 219, 0.16)';
+        ctx.lineWidth = 2.5;
+
+        ctx.beginPath();
+        ctx.moveTo(RIVER_BASE_LEFT + Math.sin(0 + waveTime) * 15, 0);
+        for (let y = 0; y <= MAP_HEIGHT; y += 10) {
+            ctx.lineTo(RIVER_BASE_LEFT + Math.sin(y * 0.025 + waveTime) * 15, y);
+        }
+        ctx.lineTo(RIVER_BASE_RIGHT + Math.sin(MAP_HEIGHT * 0.025 + waveTime + Math.PI) * 15, MAP_HEIGHT);
+        for (let y = MAP_HEIGHT; y >= 0; y -= 10) {
+            ctx.lineTo(RIVER_BASE_RIGHT + Math.sin(y * 0.025 + waveTime + Math.PI) * 15, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        const steps = 24;
+        const cornerSize = 120;
+
+        function renderCornerPath(startX, startY, targetX, targetY, cx, cy, type) {
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            for(let i=0; i<=steps; i++) {
+                const t = i / steps;
+                const lx = startX + (targetX - startX) * t;
+                const ly = startY + (targetY - startY) * t;
+                const wave = Math.sin(t * Math.PI * 3 + waveTime) * 6;
+                
+                let fx = lx, fy = ly;
+                if(type === 'TL') { fx += wave; fy += wave; }
+                if(type === 'TR') { fx -= wave; fy += wave; }
+                if(type === 'BL') { fx += wave; fy -= wave; }
+                if(type === 'BR') { fx -= wave; fy -= wave; }
+
+                ctx.lineTo(fx, fy);
+            }
+            ctx.lineTo(cx, cy);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        renderCornerPath(0, cornerSize, cornerSize, 0, 0, 0, 'TL');
+        renderCornerPath(MAP_WIDTH, cornerSize, MAP_WIDTH - cornerSize, 0, MAP_WIDTH, 0, 'TR');
+        renderCornerPath(0, MAP_HEIGHT - cornerSize, cornerSize, MAP_HEIGHT, 0, MAP_HEIGHT, 'BL');
+        renderCornerPath(MAP_WIDTH, MAP_HEIGHT - cornerSize, MAP_WIDTH - cornerSize, MAP_HEIGHT, MAP_WIDTH, MAP_HEIGHT, 'BR');
+    }
+
+    function createBurstFX(x, y, color) {
+        for (let i = 0; i < 18; i++) {
+            FXParticles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 8, vy: (Math.random() - 0.5) * 8,
+                radius: Math.random() * 3 + 1.5, alpha: 1, color: color
+            });
+        }
+    }
+
+    function initMatch() {
+        p1Dot = new StrategicDot(100, MAP_HEIGHT / 2, '#007aff', 1);
+        p2Dot = new StrategicDot(MAP_WIDTH - 100, MAP_HEIGHT / 2, '#af52de', 2);
+        
+        FXParticles = [];
+        matchOver = false;
+        dragControl.active = false;
+        turnOwner = 1;
+        aiCooldownTimer = 0;
+        refreshUIBadges();
+        overlay.classList.remove('show');
+    }
+
+    function refreshUIBadges() {
+        if(turnOwner === 1) {
+            badgeP1.classList.add('active'); badgeP2.classList.remove('active');
+        } else {
+            badgeP1.classList.remove('active'); badgeP2.classList.add('active');
+        }
+    }
+
+    function handleBilliardCollision() {
+        const dx = p2Dot.x - p1Dot.x; const dy = p2Dot.y - p1Dot.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < p1Dot.radius + p2Dot.radius) {
+            const nx = dx / distance; const ny = dy / distance;
+            const kx = p1Dot.vx - p2Dot.vx; const ky = p1Dot.vy - p2Dot.vy;
+            const p = 2 * (nx * kx + ny * ky) / 2;
+            const bounceK = 1.05; 
+
+            p1Dot.vx -= p * nx * bounceK; p1Dot.vy -= p * ny * bounceK;
+            p2Dot.vx += p * nx * bounceK; p2Dot.vy += p * ny * bounceK;
+
+            const overlap = (p1Dot.radius + p2Dot.radius) - distance;
+            p1Dot.x -= overlap * nx * 0.5; p1Dot.y -= overlap * ny * 0.5;
+            p2Dot.x += overlap * nx * 0.5; p2Dot.y += overlap * ny * 0.5;
+
+            playSound('hit');
+            createBurstFX((p1Dot.x + p2Dot.x) / 2, (p1Dot.y + p2Dot.y) / 2, '#7f8c8d');
+        }
+    }
+
+    // --- 💡 智能核心：战术 AI 思考引擎 ---
+    function executeAILogic() {
+        if (matchOver || p1Dot.isMoving() || p2Dot.isMoving()) return;
+
+        // 1. 自我生存环境检测：AI 是否快要掉进河里或角落？
+        const aiInDanger = checkWaterContamination(p2Dot.x - 30, p2Dot.y) || 
+                                checkWaterContamination(p2Dot.x + 30, p2Dot.y) ||
+                                checkWaterContamination(p2Dot.x, p2Dot.y - 30) ||
+                                checkWaterContamination(p2Dot.x, p2Dot.y + 30);
+
+        // 2. 玩家危险性评估：玩家是否距离危险水域极近？（如果是，触发致命一击）
+        const playerNearDanger = checkWaterContamination(p1Dot.x - 45, p1Dot.y) || 
+                                  checkWaterContamination(p1Dot.x + 45, p1Dot.y);
+
+        let targetVx = 0;
+        let targetVy = 0;
+
+        if (aiInDanger && !playerNearDanger && Math.random() < 0.7) {
+            // 【战术避险模式】：AI 发现自身位置尴尬，选择轻弹向安全的右侧陆地腹地靠拢
+            const safeTargetX = MAP_WIDTH - 120;
+            const safeTargetY = MAP_HEIGHT / 2 + (Math.random() - 0.5) * 100;
+            const dx = safeTargetX - p2Dot.x;
+            const dy = safeTargetY - p2Dot.y;
+            const dist = Math.hypot(dx, dy);
+            
+            // 轻柔的避险力度
+            targetVx = (dx / dist) * (Math.random() * 3 + 4);
+            targetVy = (dy / dist) * (Math.random() * 3 + 4);
+        } else {
+            // 【追踪/狙击进攻模式】：精准锁定玩家中心
+            const dx = p1Dot.x - p2Dot.x;
+            const dy = p1Dot.y - p2Dot.y;
+            const dist = Math.hypot(dx, dy);
+
+            // 根据距离和玩家危险度动态校准弹射期望力矩
+            let forceMagnitude = Math.random() * 6 + 9; // 基础弹射速度
+            if (playerNearDanger) {
+                forceMagnitude = Math.random() * 5 + 14; // 大力出奇迹，直接推下水
+            } else if (dist > 500) {
+                forceMagnitude = Math.random() * 4 + 11; // 超长对角线精准长传
+            }
+
+            // 加入微小的随机散射角（模拟人类手滑，更自然）
+            const errorInversion = playerNearDanger ? 0.02 : 0.07;
+            const angleVariance = (Math.random() - 0.5) * errorInversion;
+            const baseAngle = Math.atan2(dy, dx) + angleVariance;
+
+            targetVx = Math.cos(baseAngle) * forceMagnitude;
+            targetVy = Math.sin(baseAngle) * forceMagnitude;
+        }
+
+        // 3. 执行物理弹射
+        p2Dot.vx = targetVx;
+        p2Dot.vy = targetVy;
+
+        playSound('launch');
+        createBurstFX(p2Dot.x, p2Dot.y, p2Dot.color);
+        
+        // 移交回合给玩家
+        turnOwner = 1;
+    }
+
+    function drawPremiumAimOverlay() {
+        if (!dragControl.active) return;
+
+        const activeDot = p1Dot; // 玩家只允许拉线控制自己
+        const dx = dragControl.start.x - dragControl.current.x;
+        const dy = dragControl.start.y - dragControl.current.y;
+        const totalPull = Math.sqrt(dx * dx + dy * dy);
+
+        if (totalPull < 3) return;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([5, 7]);
+        ctx.moveTo(activeDot.x, activeDot.y);
+        ctx.lineTo(activeDot.x + dx * 5.0, activeDot.y + dy * 5.0);
+        ctx.strokeStyle = 'rgba(44, 62, 80, 0.2)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+
+        const ringRadius = activeDot.radius + 15;
+        const radianAngle = Math.atan2(dy, dx);
+        const upperThreshold = 320; 
+        const loadFactor = Math.min(totalPull / upperThreshold, 1);
+
+        ctx.save();
+        ctx.lineWidth = 4.5; ctx.lineCap = 'round';
+        const rVal = Math.floor(242 * loadFactor);
+        const gVal = Math.floor(210 * (1 - loadFactor * 0.3));
+        const bVal = Math.floor(119 * (1 - loadFactor));
+        ctx.strokeStyle = `rgb(${rVal}, ${gVal}, ${bVal})`;
+        
+        const arcSpread = Math.PI * 0.25 + (loadFactor * Math.PI * 0.35);
+        ctx.beginPath();
+        ctx.arc(activeDot.x, activeDot.y, ringRadius, radianAngle - arcSpread, radianAngle + arcSpread);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.beginPath(); ctx.arc(dragControl.start.x, dragControl.start.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = activeDot.color; ctx.fill();
+
+        ctx.beginPath(); ctx.moveTo(dragControl.start.x, dragControl.start.y); ctx.lineTo(dragControl.current.x, dragControl.current.y);
+        ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 2; ctx.stroke();
+    }
+
+    function processFXParticles() {
+        for (let i = FXParticles.length - 1; i >= 0; i--) {
+            let p = FXParticles[i];
+            p.x += p.vx; p.y += p.vy; p.alpha -= 0.025;
+            if (p.alpha <= 0) { FXParticles.splice(i, 1); continue; }
+            ctx.save(); ctx.globalAlpha = p.alpha;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fillStyle = p.color; ctx.fill(); ctx.restore();
+        }
+    }
+
+    function evaluateSinkingConditions() {
+        if (matchOver) return;
+
+        if (!p1Dot.isMoving() && !p2Dot.isMoving()) {
+            const p1Sunk = checkWaterContamination(p1Dot.x, p1Dot.y);
+            const p2Sunk = checkWaterContamination(p2Dot.x, p2Dot.y);
+
+            if (p1Sunk && p2Sunk) {
+                playSound('sink');
+                concludeMatch("Mutual Wipeout", "#2c3e50");
+            } else if (p1Sunk) {
+                playSound('sink');
+                concludeMatch("AI Wins! 💥", "var(--p2-color)");
+            } else if (p2Sunk) {
+                playSound('sink');
+                concludeMatch("You Win! 🎉", "var(--p1-color)");
+            }
+        }
+    }
+
+    function concludeMatch(heading, color) {
+        matchOver = true;
+        overlay.classList.add('show');
+        resultTitle.innerText = heading;
+        resultTitle.style.color = color;
+    }
+
+    function sequenceTurnFlow() {
+        if (matchOver) return;
+
+        if (!p1Dot.isMoving() && !p2Dot.isMoving() && !dragControl.active) {
+            refreshUIBadges();
+            
+            // 如果轮到 AI 并且静止，开始计时
+            if (turnOwner === 2) {
+                aiCooldownTimer++;
+                if (aiCooldownTimer > 45) { // 约 0.7 秒的眨眼和思考延迟，体验更自然
+                    executeAILogic();
+                    aiCooldownTimer = 0;
+                }
+            }
+        } else {
+            aiCooldownTimer = 0; // 运动期间重置计时器
+        }
+    }
+
+    function executeEngineLoop() {
+        ctx.fillStyle = '#f2f4f3'; 
+        ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+        
+        waveTime += 0.02; 
+
+        drawWaterAssets();
+        
+        p1Dot.update(); p2Dot.update();
+        handleBilliardCollision();
+        evaluateSinkingConditions();
+
+        p1Dot.draw(); p2Dot.draw();
+        drawPremiumAimOverlay();
+        processFXParticles();
+
+        sequenceTurnFlow();
+
+        requestAnimationFrame(executeEngineLoop);
+    }
+
+    function captureCoordinates(e) {
+        const bbox = canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - bbox.left) * (MAP_WIDTH / bbox.width),
+            y: (e.clientY - bbox.top) * (MAP_HEIGHT / bbox.height)
+        };
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        initAudio();
+        // 如果游戏结束、或者正在滑行、或者是 AI 的回合，锁定玩家操作
+        if (matchOver || p1Dot.isMoving() || p2Dot.isMoving() || turnOwner !== 1) return;
+        
+        const mouseCoords = captureCoordinates(e);
+        const targetDot = p1Dot;
+        
+        const separation = Math.hypot(mouseCoords.x - targetDot.x, mouseCoords.y - targetDot.y);
+        if (separation < targetDot.radius * 3.8) {
+            dragControl.active = true;
+            dragControl.start = mouseCoords;
+            dragControl.current = mouseCoords;
+        }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!dragControl.active) return;
+        dragControl.current = captureCoordinates(e);
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (!dragControl.active) return;
+        dragControl.active = false;
+
+        const targetDot = p1Dot;
+        const pushX = dragControl.start.x - dragControl.current.x;
+        const pushY = dragControl.start.y - dragControl.current.y;
+
+        targetDot.vx = pushX * FORCE_SCALE;
+        targetDot.vy = pushY * FORCE_SCALE;
+
+        if (targetDot.isMoving()) {
+            playSound('launch');
+            createBurstFX(targetDot.x, targetDot.y, targetDot.color);
+            // 顺畅地将代币转交给 AI 回合
+            turnOwner = 2;
+        }
+    });
+
+    canvas.addEventListener('touchstart', (e) => {
+        initAudio();
+        if (e.touches.length === 1) {
+            const artificialEvent = new MouseEvent("mousedown", {
+                clientX: e.touches[0].clientX,
+                clientY: e.touches[0].clientY
+            });
+            canvas.dispatchEvent(artificialEvent);
+        }
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+        if (!dragControl.active) return;
+        if (e.touches.length === 1) {
+            const artificialEvent = new MouseEvent("mousemove", {
+                clientX: e.touches[0].clientX,
+                clientY: e.touches[0].clientY
+            });
+            window.dispatchEvent(artificialEvent);
+        }
+    }, { passive: true });
+
+    window.addEventListener('touchend', () => {
+        const artificialEvent = new MouseEvent("mouseup", {});
+        window.dispatchEvent(artificialEvent);
+    });
+
+    function restartMatch() { initMatch(); }
+
+    initMatch();
+    executeEngineLoop();
+</script>
+</body>
+</html>
