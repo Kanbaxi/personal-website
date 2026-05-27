@@ -73,7 +73,7 @@ function App() {
               <h4>Xio</h4>
 
               <p>
-                <strong>How to Play:</strong> A fast-paced, turn-based battle game. Manage, predict, and strike. You only have 5 seconds to decide and act!
+                <strong>How to Play:</strong> A fast-paced, turn-based battle game. Manage, predict, and strike. Only 5 seconds to decide and act per turn. 
               </p>
 
               <a
